@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>registercodetogroup</name>
+    <displayName><![CDATA[Group registration codes]]></displayName>
+    <version><![CDATA[0.1.0]]></version>
+    <description><![CDATA[This module allows users register with a custom code/password that adds them automatically into a user group. This way shop owners can give promo-codes that offer users discounts or special products, for example.]]></description>
+    <author><![CDATA[Andr&eacute;s Vieira & Samuel Rodr&iacute;guez]]></author>
+    <tab><![CDATA[others]]></tab>
+    <is_configurable>1</is_configurable>
+    <need_instance>1</need_instance>
+	<limited_countries></limited_countries>
+</module>

@@ -59,7 +59,8 @@ class Registercodetogroup extends Module
      */
     public function install()
     {
-        Configuration::updateValue('REGISTERCODETOGROUP_LIVE_MODE', false);
+        Configuration::updateValue('REGISTERCODETOGROUP_DATA', serialize(array()));
+
 
         include(dirname(__FILE__).'/sql/install.php');
 
@@ -67,12 +68,13 @@ class Registercodetogroup extends Module
             $this->registerHook('header') &&
             $this->registerHook('backOfficeHeader') &&
             $this->registerHook('validateCustomerFormFields') &&
+            $this->registerHook('actionCustomerAccountAdd') &&
             $this->registerHook('displayCustomerAccountForm');
     }
 
     public function uninstall()
     {
-        Configuration::deleteByName('REGISTERCODETOGROUP_LIVE_MODE');
+        Configuration::deleteByName('REGISTERCODETOGROUP_DATA');
 
         include(dirname(__FILE__).'/sql/uninstall.php');
 
@@ -87,7 +89,7 @@ class Registercodetogroup extends Module
         /**
          * If values have been submitted in the form, process.
          */
-        if (((bool)Tools::isSubmit('submitRegistercodetogroupModule')) == true) {
+        if (((bool)Tools::isSubmit('submitBtn')) == true) {
             $this->postProcess();
         }
 
@@ -103,79 +105,26 @@ class Registercodetogroup extends Module
      */
     protected function renderForm()
     {
-        $helper = new HelperForm();
+        //Assign variables to template
+        $data = unserialize(Configuration::get('REGISTERCODETOGROUP_DATA'));
+        $form_action = $this->context->link->getAdminLink('AdminModules', false)
+                .'&configure='.$this->name.'&tab_module='.$this->tab.'&module_name='.$this->name
+                .'&token='.Tools::getAdminTokenLite('AdminModules');
+        $groups = Group::getGroups($this->context->language->id);
 
-        $helper->show_toolbar = false;
-        $helper->table = $this->table;
-        $helper->module = $this;
-        $helper->default_form_language = $this->context->language->id;
-        $helper->allow_employee_form_lang = Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG', 0);
+        foreach ($data as $key => $value) {
+            $data[$key]["groups_names"] = Array();
+            foreach ($value["groups_assigned"] as $gak => $gav) {
+                array_push($data[$key]["groups_names"], $groups[$gav]['name']);
+            }
+        }
 
-        $helper->identifier = $this->identifier;
-        $helper->submit_action = 'submitRegistercodetogroupModule';
-        $helper->currentIndex = $this->context->link->getAdminLink('AdminModules', false)
-            .'&configure='.$this->name.'&tab_module='.$this->tab.'&module_name='.$this->name;
-        $helper->token = Tools::getAdminTokenLite('AdminModules');
+        $this->context->smarty->assign('groups', $groups);
+        $this->context->smarty->assign('form_action', $form_action);
+        $this->context->smarty->assign('data', $data);
 
-        $helper->tpl_vars = array(
-            'fields_value' => $this->getConfigFormValues(), /* Add values for your inputs */
-            'languages' => $this->context->controller->getLanguages(),
-            'id_language' => $this->context->language->id,
-        );
-
-        return $helper->generateForm(array($this->getConfigForm()));
-    }
-
-    /**
-     * Create the structure of your form.
-     */
-    protected function getConfigForm()
-    {
-        return array(
-            'form' => array(
-                'legend' => array(
-                'title' => $this->l('Settings'),
-                'icon' => 'icon-cogs',
-                ),
-                'input' => array(
-                    array(
-                        'type' => 'switch',
-                        'label' => $this->l('Live mode'),
-                        'name' => 'REGISTERCODETOGROUP_LIVE_MODE',
-                        'is_bool' => true,
-                        'desc' => $this->l('Use this module in live mode'),
-                        'values' => array(
-                            array(
-                                'id' => 'active_on',
-                                'value' => true,
-                                'label' => $this->l('Enabled')
-                            ),
-                            array(
-                                'id' => 'active_off',
-                                'value' => false,
-                                'label' => $this->l('Disabled')
-                            )
-                        ),
-                    ),
-                    array(
-                        'col' => 3,
-                        'type' => 'text',
-                        'prefix' => '<i class="icon icon-envelope"></i>',
-                        'desc' => $this->l('Enter a valid email address'),
-                        'name' => 'REGISTERCODETOGROUP_ACCOUNT_EMAIL',
-                        'label' => $this->l('Email'),
-                    ),
-                    array(
-                        'type' => 'password',
-                        'name' => 'REGISTERCODETOGROUP_ACCOUNT_PASSWORD',
-                        'label' => $this->l('Password'),
-                    ),
-                ),
-                'submit' => array(
-                    'title' => $this->l('Save'),
-                ),
-            ),
-        );
+        //Template file
+        return $this->display(__FILE__, 'moduleConfiguration.tpl');
     }
 
     /**
@@ -183,11 +132,7 @@ class Registercodetogroup extends Module
      */
     protected function getConfigFormValues()
     {
-        return array(
-            'REGISTERCODETOGROUP_LIVE_MODE' => Configuration::get('REGISTERCODETOGROUP_LIVE_MODE', true),
-            'REGISTERCODETOGROUP_ACCOUNT_EMAIL' => Configuration::get('REGISTERCODETOGROUP_ACCOUNT_EMAIL', 'contact@prestashop.com'),
-            'REGISTERCODETOGROUP_ACCOUNT_PASSWORD' => Configuration::get('REGISTERCODETOGROUP_ACCOUNT_PASSWORD', null),
-        );
+        return array();
     }
 
     /**
@@ -195,11 +140,13 @@ class Registercodetogroup extends Module
      */
     protected function postProcess()
     {
-        $form_values = $this->getConfigFormValues();
+        $data = unserialize(Configuration::get('REGISTERCODETOGROUP_DATA'));
+        $data[Tools::getValue("code_id")] = Array(
+            "code" => Tools::getValue("code"),
+            "groups_assigned" => Tools::getValue("groups_assigned")
+        );
 
-        foreach (array_keys($form_values) as $key) {
-            Configuration::updateValue($key, Tools::getValue($key));
-        }
+        Configuration::updateValue("REGISTERCODETOGROUP_DATA", serialize($data));
     }
 
     /**
@@ -229,6 +176,28 @@ class Registercodetogroup extends Module
 
     public function hookDisplayCustomerAccountForm()
     {
-        /* Place your code here. */
+
+        //Get PrestaShop groups
+        $groups = Group::getGroups($this->context->language->id);
+
+        //Assign variables to template
+        $this->context->smarty->assign('customerGroups', $groups);
+
+        //Template file
+        return $this->display(__FILE__, 'hookDisplayCustomerAccountForm.tpl');
+    }
+
+    public function hookActionCustomerAccountAdd($params)
+    {
+        //Retrieve variable for group code from the registration form
+        $group_code = Tools::getValue('group_code','');
+        $group_info = unserialize(Configuration::get('REGISTERCODETOGROUP_DATA'));
+
+        foreach ($group_info as $key => $value) {
+            if($value["code"] == $group_code){
+                $params['newCustomer']->addGroups($value["groups_assigned"]);
+            }
+        }
+
     }
 }
